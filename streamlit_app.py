@@ -22,10 +22,10 @@ DEFAULTS: dict[str, Any] = {
         "usdTargetCapital": 100_000.0,
         "shareExtendedFormat": False,
         "ruleTags": [
-            "Scrolled too late",
-            "Impulse trade",
-            "Broke diet",
-            "Porn/sexual content",
+            "늦게까지 스크롤",
+            "충동 매매",
+            "식단 위반",
+            "음란물/성적 콘텐츠",
         ],
     },
     "dailyLogs": {},
@@ -33,6 +33,20 @@ DEFAULTS: dict[str, Any] = {
 }
 
 STRESS_MAP = {"low": 1, "normal": 2, "high": 3, "very high": 4}
+STATUS_OPTIONS = ["done", "skipped", "failed"]
+STATUS_LABELS = {"done": "완료", "skipped": "건너뜀", "failed": "실패"}
+BINARY_OPTIONS = ["done", "failed"]
+BINARY_LABELS = {"done": "완료", "failed": "실패"}
+STRESS_OPTIONS = ["", "low", "normal", "high", "very high"]
+STRESS_LABELS = {"": "없음", "low": "낮음", "normal": "보통", "high": "높음", "very high": "매우 높음"}
+STRESS_CAUSE_LABELS = {
+    "work": "업무",
+    "relationships": "관계",
+    "sleep": "수면",
+    "loneliness": "외로움",
+    "health": "건강",
+    "other": "기타",
+}
 
 
 def load_data() -> dict[str, Any]:
@@ -242,72 +256,104 @@ def share_text(data: dict[str, Any], trade: dict[str, Any]) -> str:
 
 
 def render_today(data: dict[str, Any]) -> None:
-    st.subheader("Today")
+    st.subheader("오늘")
     now = datetime.now()
     d = logical_date(now, data["settings"]["dayStartTime"])
     log = get_or_create_log(data, d)
 
-    st.caption(f"Logical Date: {d.isoformat()} | Day Start: {data['settings']['dayStartTime']}")
+    st.caption(f"논리 날짜: {d.isoformat()} | 하루 시작 시각: {data['settings']['dayStartTime']}")
 
     c1, c2 = st.columns(2)
     with c1:
-        log["exerciseStatus"] = st.selectbox("Exercise", ["done", "skipped", "failed"], index=["done", "skipped", "failed"].index(log["exerciseStatus"]))
-        log["readingStatus"] = st.selectbox("Reading", ["done", "skipped", "failed"], index=["done", "skipped", "failed"].index(log["readingStatus"]))
-        log["noMasturbationStatus"] = st.selectbox("No masturbation", ["done", "failed"], index=["done", "failed"].index(log["noMasturbationStatus"]))
+        log["exerciseStatus"] = st.selectbox(
+            "운동",
+            STATUS_OPTIONS,
+            index=STATUS_OPTIONS.index(log["exerciseStatus"]),
+            format_func=lambda x: STATUS_LABELS[x],
+        )
+        log["readingStatus"] = st.selectbox(
+            "독서",
+            STATUS_OPTIONS,
+            index=STATUS_OPTIONS.index(log["readingStatus"]),
+            format_func=lambda x: STATUS_LABELS[x],
+        )
+        log["noMasturbationStatus"] = st.selectbox(
+            "금딸",
+            BINARY_OPTIONS,
+            index=BINARY_OPTIONS.index(log["noMasturbationStatus"]),
+            format_func=lambda x: BINARY_LABELS[x],
+        )
         if is_weekday(d):
             val = log.get("weekdayNoGameStatus") or "failed"
-            log["weekdayNoGameStatus"] = st.selectbox("Weekday no games", ["done", "failed"], index=["done", "failed"].index(val))
+            log["weekdayNoGameStatus"] = st.selectbox(
+                "평일 노게임",
+                BINARY_OPTIONS,
+                index=BINARY_OPTIONS.index(val),
+                format_func=lambda x: BINARY_LABELS[x],
+            )
         else:
-            st.info("Weekday no games: N/A on weekends")
+            st.info("평일 노게임: 주말은 해당 없음")
 
-        log["wakeUpOnTime"] = st.checkbox("Wake up on time", value=bool(log["wakeUpOnTime"]))
-        log["breakfastDone"] = st.checkbox("Breakfast done", value=bool(log["breakfastDone"]))
-        log["stockReviewDone"] = st.checkbox("Stock review done", value=bool(log["stockReviewDone"]))
+        log["wakeUpOnTime"] = st.checkbox("기상 시간 준수", value=bool(log["wakeUpOnTime"]))
+        log["breakfastDone"] = st.checkbox("아침 식사 완료", value=bool(log["breakfastDone"]))
+        log["stockReviewDone"] = st.checkbox("주식 리뷰 완료", value=bool(log["stockReviewDone"]))
 
     with c2:
-        log["proteinGrams"] = st.number_input("Protein grams", min_value=0, max_value=500, value=int(log["proteinGrams"]), step=1)
-        add = st.radio("Quick add", [0, 10, 20, 30], horizontal=True)
+        log["proteinGrams"] = st.number_input("단백질(g)", min_value=0, max_value=500, value=int(log["proteinGrams"]), step=1)
+        add = st.radio("빠른 추가", [0, 10, 20, 30], horizontal=True, format_func=lambda x: f"+{x}" if x else "선택 안 함")
         if add:
             log["proteinGrams"] = int(log["proteinGrams"]) + int(add)
 
-        stress_levels = ["", "low", "normal", "high", "very high"]
-        log["stressLevel"] = st.selectbox("Stress index", stress_levels, index=stress_levels.index(log.get("stressLevel", "")))
+        stress_level = log.get("stressLevel", "")
+        if stress_level not in STRESS_OPTIONS:
+            stress_level = ""
+        log["stressLevel"] = st.selectbox(
+            "스트레스 지수",
+            STRESS_OPTIONS,
+            index=STRESS_OPTIONS.index(stress_level),
+            format_func=lambda x: STRESS_LABELS[x],
+        )
         causes = ["work", "relationships", "sleep", "loneliness", "health", "other"]
-        log["stressCauses"] = st.multiselect("Stress causes", causes, default=log.get("stressCauses", []))
+        log["stressCauses"] = st.multiselect(
+            "스트레스 원인",
+            causes,
+            default=log.get("stressCauses", []),
+            format_func=lambda x: STRESS_CAUSE_LABELS[x],
+        )
 
-        log["abdominalPainIndex"] = st.slider("Abdominal pain index", 0, 10, int(log.get("abdominalPainIndex", 0)))
-        log["abdominalPainNote"] = st.text_area("Abdominal pain note", value=log.get("abdominalPainNote", ""))
+        log["abdominalPainIndex"] = st.slider("배아픔 지수", 0, 10, int(log.get("abdominalPainIndex", 0)))
+        log["abdominalPainNote"] = st.text_area("배아픔 메모", value=log.get("abdominalPainNote", ""))
 
-        log["ruleViolated"] = st.checkbox("Rule violated today?", value=bool(log.get("ruleViolated", False)))
+        log["ruleViolated"] = st.checkbox("오늘 규칙 위반?", value=bool(log.get("ruleViolated", False)))
         if log["ruleViolated"]:
-            log["ruleViolationTags"] = st.multiselect("Violation tags", data["settings"]["ruleTags"], default=log.get("ruleViolationTags", []))
-            log["ruleViolationNote"] = st.text_area("Violation note", value=log.get("ruleViolationNote", ""), key="viol_note")
+            log["ruleViolationTags"] = st.multiselect("위반 태그", data["settings"]["ruleTags"], default=log.get("ruleViolationTags", []))
+            log["ruleViolationNote"] = st.text_area("위반 메모", value=log.get("ruleViolationNote", ""), key="viol_note")
         else:
             log["ruleViolationTags"] = []
             log["ruleViolationNote"] = ""
 
-    if st.button("Save Today Log", type="primary"):
+    if st.button("오늘 기록 저장", type="primary"):
         log["updatedAt"] = datetime.now().isoformat()
         data["dailyLogs"][date_key(d)] = log
         save_data(data)
-        st.success("Saved")
+        st.success("저장되었습니다")
 
 
 def render_trades(data: dict[str, Any]) -> None:
-    st.subheader("Trades")
-    track = st.segmented_control("Track", ["KRW", "USD"], default="KRW")
+    st.subheader("트레이드")
+    track = st.segmented_control("트랙", ["KRW", "USD"], default="KRW")
 
     with st.form("add_trade", clear_on_submit=True):
-        ts = st.datetime_input("Timestamp", value=datetime.now())
-        symbol = st.text_input("Symbol/Name")
-        side = st.selectbox("Side", ["buy", "sell"])
-        return_pct = st.number_input("Return %", value=0.0, step=0.1, format="%.2f")
-        bet_pct = st.number_input("Bet %", min_value=0.0, max_value=100.0, value=100.0, step=1.0)
-        submitted = st.form_submit_button("Save Trade", type="primary")
+        ts = st.datetime_input("시각", value=datetime.now())
+        symbol = st.text_input("종목/이름")
+        side = st.selectbox("포지션", ["buy", "sell"], format_func=lambda x: "매수" if x == "buy" else "매도")
+        return_pct = st.number_input("수익률(%)", value=0.0, step=0.1, format="%.2f")
+        bet_pct = st.number_input("베팅 비율(%)", min_value=0.0, max_value=100.0, value=100.0, step=1.0)
+        submitted = st.form_submit_button("트레이드 저장", type="primary")
 
     if submitted:
         if not symbol.strip():
-            st.error("Symbol is required")
+            st.error("종목/이름은 필수입니다")
         else:
             existing = track_trades(data, track)
             prev = float(existing[-1]["newBalance"]) if existing else track_start(data, track)
@@ -327,33 +373,33 @@ def render_trades(data: dict[str, Any]) -> None:
                 }
             )
             save_data(data)
-            st.success("Trade saved")
+            st.success("트레이드가 저장되었습니다")
 
     stats = trade_stats(data, track)
     a, b, c = st.columns(3)
-    a.metric("Current Balance", f"{stats.current_balance:,.2f} {track}")
-    b.metric("Progress", f"{stats.progress * 100:.1f}%")
-    c.metric("Win Rate", f"{stats.win_rate:.1f}%")
+    a.metric("현재 잔고", f"{stats.current_balance:,.2f} {track}")
+    b.metric("목표 진행률", f"{stats.progress * 100:.1f}%")
+    c.metric("승률", f"{stats.win_rate:.1f}%")
 
     st.write(
-        f"Overall Return: {stats.overall_return_pct:.2f}% | "
-        f"Profit Streak: {stats.current_profit_streak} (best {stats.best_profit_streak})"
+        f"누적 수익률: {stats.overall_return_pct:.2f}% | "
+        f"수익 연승: {stats.current_profit_streak} (최고 {stats.best_profit_streak})"
     )
 
     rows = list(reversed(track_trades(data, track)))
     if not rows:
-        st.info("No trades yet")
+        st.info("아직 트레이드가 없습니다")
         return
 
     for i, t in enumerate(rows):
         st.markdown(
             f"**{t['symbol']}** {'매수' if t['side'] == 'buy' else '매도'}, {t['returnPct']:.2f}%  \n"
             f"{datetime.fromisoformat(t['timestamp']).strftime('%Y-%m-%d %H:%M')} | "
-            f"Bet {t['betPct']:.1f}% | Prev {t['prevBalance']:.2f} -> New {t['newBalance']:.2f} {track}"
+            f"베팅 {t['betPct']:.1f}% | 이전 {t['prevBalance']:.2f} -> 현재 {t['newBalance']:.2f} {track}"
         )
         txt = share_text(data, t)
         st.code(txt)
-        st.caption("Copy above text for Threads post")
+        st.caption("위 문구를 복사해 Threads에 새 글로 올리세요")
         if i < len(rows) - 1:
             st.divider()
 
@@ -370,7 +416,7 @@ def recent_logs(data: dict[str, Any], days: int) -> list[tuple[date, dict[str, A
 
 
 def render_stats(data: dict[str, Any]) -> None:
-    st.subheader("Stats")
+    st.subheader("통계")
 
     global_s = streak_count(data, lambda d, l: global_hit(d, l))
     exercise_s = streak_count(data, lambda _, l: l["exerciseStatus"] == "done")
@@ -379,11 +425,11 @@ def render_stats(data: dict[str, Any]) -> None:
     games_s = streak_count(data, lambda d, l: (not is_weekday(d)) or (l.get("weekdayNoGameStatus") == "done"))
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Global Streak", global_s)
-    c1.metric("Exercise", exercise_s)
-    c2.metric("Reading", reading_s)
-    c2.metric("No Masturbation", nom_s)
-    c3.metric("Weekday No Games", games_s)
+    c1.metric("글로벌 스트릭", global_s)
+    c1.metric("운동", exercise_s)
+    c2.metric("독서", reading_s)
+    c2.metric("금딸", nom_s)
+    c3.metric("평일 노게임", games_s)
 
     logs = list(data["dailyLogs"].values())
     total_viol = sum(1 for l in logs if l.get("ruleViolated"))
@@ -392,7 +438,7 @@ def render_stats(data: dict[str, Any]) -> None:
     viol7 = sum(1 for _, l in l7 if l.get("ruleViolated"))
     viol30 = sum(1 for _, l in l30 if l.get("ruleViolated"))
 
-    st.write(f"Rule violations: total {total_viol}, 7d {viol7}, 30d {viol30}")
+    st.write(f"규칙 위반: 총 {total_viol}회, 최근 7일 {viol7}회, 최근 30일 {viol30}회")
 
     stress_vals = [STRESS_MAP.get(l.get("stressLevel", "")) for _, l in l7 if l.get("stressLevel")]
     stress_vals = [v for v in stress_vals if v is not None]
@@ -400,45 +446,45 @@ def render_stats(data: dict[str, Any]) -> None:
 
     avg_stress = sum(stress_vals) / len(stress_vals) if stress_vals else 0
     avg_pain = sum(pain_vals) / len(pain_vals) if pain_vals else 0
-    st.write(f"Avg stress (7d): {avg_stress:.2f} | Avg abdominal pain (7d): {avg_pain:.2f}")
+    st.write(f"최근 7일 평균 스트레스: {avg_stress:.2f} | 최근 7일 평균 배아픔 지수: {avg_pain:.2f}")
 
     krw = trade_stats(data, "KRW")
     usd = trade_stats(data, "USD")
     st.write(
-        f"KRW balance {krw.current_balance:,.0f} / profit streak {krw.current_profit_streak} (best {krw.best_profit_streak})"
+        f"KRW 잔고 {krw.current_balance:,.0f} / 수익 연승 {krw.current_profit_streak} (최고 {krw.best_profit_streak})"
     )
     st.write(
-        f"USD balance {usd.current_balance:,.2f} / profit streak {usd.current_profit_streak} (best {usd.best_profit_streak})"
+        f"USD 잔고 {usd.current_balance:,.2f} / 수익 연승 {usd.current_profit_streak} (최고 {usd.best_profit_streak})"
     )
 
 
 def render_settings(data: dict[str, Any]) -> None:
-    st.subheader("Settings")
+    st.subheader("설정")
     s = data["settings"]
 
     with st.form("settings_form"):
-        s["proteinGoal"] = st.number_input("Protein goal", min_value=0, value=int(s["proteinGoal"]))
-        s["wakeGoalTime"] = st.text_input("Wake goal time (HH:MM)", value=s["wakeGoalTime"])
-        s["reminderTime"] = st.text_input("Reminder time (HH:MM)", value=s["reminderTime"])
-        s["dayStartTime"] = st.text_input("Day start time (HH:MM)", value=s["dayStartTime"])
+        s["proteinGoal"] = st.number_input("단백질 목표(g)", min_value=0, value=int(s["proteinGoal"]))
+        s["wakeGoalTime"] = st.text_input("기상 목표 시각 (HH:MM)", value=s["wakeGoalTime"])
+        s["reminderTime"] = st.text_input("알림 시각 (HH:MM)", value=s["reminderTime"])
+        s["dayStartTime"] = st.text_input("하루 시작 시각 (HH:MM)", value=s["dayStartTime"])
 
-        s["krwStartCapital"] = st.number_input("KRW start", value=float(s["krwStartCapital"]))
-        s["krwTargetCapital"] = st.number_input("KRW target", value=float(s["krwTargetCapital"]))
-        s["usdStartCapital"] = st.number_input("USD start", value=float(s["usdStartCapital"]))
-        s["usdTargetCapital"] = st.number_input("USD target", value=float(s["usdTargetCapital"]))
+        s["krwStartCapital"] = st.number_input("KRW 시작 자금", value=float(s["krwStartCapital"]))
+        s["krwTargetCapital"] = st.number_input("KRW 목표 자금", value=float(s["krwTargetCapital"]))
+        s["usdStartCapital"] = st.number_input("USD 시작 자금", value=float(s["usdStartCapital"]))
+        s["usdTargetCapital"] = st.number_input("USD 목표 자금", value=float(s["usdTargetCapital"]))
 
-        s["shareExtendedFormat"] = st.checkbox("Use extended share format", value=bool(s["shareExtendedFormat"]))
+        s["shareExtendedFormat"] = st.checkbox("확장 공유 포맷 사용", value=bool(s["shareExtendedFormat"]))
 
-        current_tags = st.text_area("Rule tags (one per line)", value="\n".join(s["ruleTags"]))
-        submitted = st.form_submit_button("Save Settings", type="primary")
+        current_tags = st.text_area("규칙 위반 태그 (줄바꿈으로 구분)", value="\n".join(s["ruleTags"]))
+        submitted = st.form_submit_button("설정 저장", type="primary")
 
-    st.caption("This is not medical advice. If symptoms worsen, seek professional care.")
-    st.info("Reminder text: 체크 알림 / 오늘 체크를 안했어요!!")
+    st.caption("의료 조언이 아닙니다. 증상이 악화되면 전문가 진료를 받으세요.")
+    st.info("알림 문구: 체크 알림 / 오늘 체크를 안했어요!!")
 
     if submitted:
         s["ruleTags"] = [line.strip() for line in current_tags.splitlines() if line.strip()]
         save_data(data)
-        st.success("Settings saved")
+        st.success("설정이 저장되었습니다")
 
 
 def reminder_hint(data: dict[str, Any]) -> None:
@@ -449,14 +495,14 @@ def reminder_hint(data: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Happy Streak", page_icon="📈", layout="wide")
-    st.title("Happy Streak (Streamlit)")
-    st.caption("Local-only habit + trade tracker")
+    st.set_page_config(page_title="해피 스트릭", page_icon="📈", layout="wide")
+    st.title("해피 스트릭 (Streamlit)")
+    st.caption("로컬 전용 습관 + 트레이딩 트래커")
 
     data = load_data()
     reminder_hint(data)
 
-    tabs = st.tabs(["Today", "Trades", "Stats", "Settings"])
+    tabs = st.tabs(["오늘", "트레이드", "통계", "설정"])
     with tabs[0]:
         render_today(data)
     with tabs[1]:
